@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+  </defs>
+  <rect width="390" height="844" fill="url(#bg2)"/>
+  <rect x="18" y="26" width="354" height="792" rx="38" fill="#0f172a" stroke="#334155"/>
+  <rect x="40" y="90" width="310" height="38" rx="19" fill="#ffffff22"/>
+  <text x="48" y="114" fill="#f8fafc" font-size="14" font-family="Inter, Arial">Interactive Madagascar Map</text>
+  <rect x="40" y="142" width="310" height="340" rx="20" fill="#ffffff10"/>
+  <circle cx="160" cy="230" r="8" fill="#f59e0b"/>
+  <circle cx="240" cy="290" r="8" fill="#10b981"/>
+  <circle cx="210" cy="360" r="8" fill="#f59e0b"/>
+  <rect x="40" y="500" width="310" height="96" rx="16" fill="#ffffff15"/>
+  <rect x="40" y="610" width="150" height="88" rx="16" fill="#10b981"/>
+  <rect x="200" y="610" width="150" height="88" rx="16" fill="#f59e0b"/>
+</svg>

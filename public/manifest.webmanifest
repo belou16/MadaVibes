@@ -1,0 +1,43 @@
+{
+  "name": "MadaVibes - Premium Madagascar Tourism",
+  "short_name": "MadaVibes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "description": "Interactive Madagascar tourism app with offline regions, local guides, and live activity seasons.",
+  "screenshots": [
+    {
+      "src": "/screenshots/mobile-1.svg",
+      "sizes": "390x844",
+      "type": "image/svg+xml",
+      "label": "Hero + search on mobile"
+    },
+    {
+      "src": "/screenshots/mobile-2.svg",
+      "sizes": "390x844",
+      "type": "image/svg+xml",
+      "label": "Interactive map view"
+    },
+    {
+      "src": "/screenshots/mobile-3.svg",
+      "sizes": "390x844",
+      "type": "image/svg+xml",
+      "label": "Itinerary builder mobile"
+    },
+    {
+      "src": "/screenshots/mobile-4.svg",
+      "sizes": "390x844",
+      "type": "image/svg+xml",
+      "label": "Guides and booking"
+    }
+  ],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Ctext y='1em' font-size='96'%3E%F0%9F%A6%8E%3C/text%3E%3C/svg%3E",
+      "sizes": "128x128",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
