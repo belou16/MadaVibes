@@ -5,14 +5,16 @@ import {
   CalendarDays,
   Compass,
   Download,
+  Heart,
   MapPin,
   Search,
   Star,
+  Trash2,
   Users,
   Wallet,
   WifiOff
 } from "lucide-react";
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -58,13 +60,13 @@ const DESTINATIONS = [
 ];
 
 const GUIDE_SPOTLIGHT = [
-  { name: "Tiana Rakoto", base: "Antananarivo", reviews: 482, score: 4.9, focus: "Culture + RN7", photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80" },
-  { name: "Fara Noro", base: "Nosy Be", reviews: 339, score: 4.9, focus: "Marine + whale routes", photo: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80" },
-  { name: "Mamy Rasoanaivo", base: "Ranomafana", reviews: 291, score: 4.8, focus: "Lemur night walks", photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&q=80" }
+  { name: "Tiana Rakoto", base: "Antananarivo", reviews: 482, score: 4.9, focus: "Culture + RN7", photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80", whatsapp: "261340000001" },
+  { name: "Fara Noro", base: "Nosy Be", reviews: 339, score: 4.9, focus: "Marine + whale routes", photo: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80", whatsapp: "261340000002" },
+  { name: "Mamy Rasoanaivo", base: "Ranomafana", reviews: 291, score: 4.8, focus: "Lemur night walks", photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&q=80", whatsapp: "261340000003" }
 ];
 
 const TOP_REGIONS = [
-  "Nosy Be: Beach paradise ⭐⭐⭐⭐⭐",
+  "Nosy Be: Beach paradise",
   "RN7: Adventure road 1000km",
   "Tsingy de Bemaraha: UNESCO limestone forest",
   "Isalo: Canyon + lemurs",
@@ -72,6 +74,7 @@ const TOP_REGIONS = [
 ];
 
 const month = new Date().getMonth() + 1;
+const REGIONS = ["All", ...new Set(DESTINATIONS.map((d) => d.region))];
 
 function seasonalSummary() {
   if (month >= 4 && month <= 6) return "Perfect for lemurs in April-June. Clear trails, fewer crowds.";
@@ -79,20 +82,60 @@ function seasonalSummary() {
   return "Rainy season? BEST time for chameleons and lush rainforest photography.";
 }
 
+function safeJsonParse(value, fallback) {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function MapFlyTo({ destination }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!destination) return;
+    map.flyTo([destination.lat, destination.lng], 8, { duration: 0.8 });
+  }, [destination, map]);
+
+  return null;
+}
+
 function App() {
   const [search, setSearch] = useState("");
+  const [selectedRegion, setSelectedRegion] = useState("All");
+  const [minRating, setMinRating] = useState(4.6);
+  const [activeDestination, setActiveDestination] = useState(DESTINATIONS[0]);
+
   const [fromMga, setFromMga] = useState(500000);
-  const [rates, setRates] = useState({ EUR: 0.0002, USD: 0.00022 });
-  const [downloaded, setDownloaded] = useState(() => {
-    const saved = localStorage.getItem("mada-offline-regions");
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [rates, setRates] = useState({ EUR: 0.0002, USD: 0.00022, updatedAt: "fallback" });
+
+  const [downloaded, setDownloaded] = useState(() =>
+    safeJsonParse(localStorage.getItem("mada-offline-regions"), [])
+  );
+  const [favoriteIds, setFavoriteIds] = useState(() =>
+    safeJsonParse(localStorage.getItem("mada-favorites"), [])
+  );
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [dayPlans, setDayPlans] = useState(Array.from({ length: 7 }, () => []));
+  const [dayPlans, setDayPlans] = useState(() =>
+    safeJsonParse(localStorage.getItem("mada-day-plans"), Array.from({ length: 7 }, () => []))
+  );
+
+  const [weather, setWeather] = useState({ loading: false, temp: null, wind: null, code: null });
 
   const filtered = useMemo(() => {
-    return DESTINATIONS.filter((d) => d.name.toLowerCase().includes(search.toLowerCase()) || d.region.toLowerCase().includes(search.toLowerCase()));
-  }, [search]);
+    return DESTINATIONS.filter((d) => {
+      const textMatch = d.name.toLowerCase().includes(search.toLowerCase()) || d.region.toLowerCase().includes(search.toLowerCase());
+      const regionMatch = selectedRegion === "All" || d.region === selectedRegion;
+      const ratingMatch = d.rating >= minRating;
+      return textMatch && regionMatch && ratingMatch;
+    });
+  }, [search, selectedRegion, minRating]);
+
+  const itineraryCount = useMemo(
+    () => dayPlans.reduce((acc, day) => acc + day.length, 0),
+    [dayPlans]
+  );
 
   useEffect(() => {
     async function getRates() {
@@ -100,29 +143,80 @@ function App() {
         const response = await fetch("https://open.er-api.com/v6/latest/MGA");
         const data = await response.json();
         if (data?.rates?.EUR && data?.rates?.USD) {
-          setRates({ EUR: data.rates.EUR, USD: data.rates.USD });
+          setRates({
+            EUR: data.rates.EUR,
+            USD: data.rates.USD,
+            updatedAt: data.time_last_update_utc || "live"
+          });
         }
       } catch {
         // Keep fallback values if live conversion fails.
       }
     }
+
     getRates();
   }, []);
+
+  useEffect(() => {
+    async function getWeather() {
+      if (!activeDestination) return;
+      setWeather({ loading: true, temp: null, wind: null, code: null });
+
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${activeDestination.lat}&longitude=${activeDestination.lng}&current=temperature_2m,wind_speed_10m,weather_code`;
+        const response = await fetch(url);
+        const data = await response.json();
+        const current = data?.current;
+
+        if (current) {
+          setWeather({
+            loading: false,
+            temp: current.temperature_2m,
+            wind: current.wind_speed_10m,
+            code: current.weather_code
+          });
+          return;
+        }
+      } catch {
+        // If weather API fails, leave graceful fallback values.
+      }
+
+      setWeather({ loading: false, temp: null, wind: null, code: null });
+    }
+
+    getWeather();
+  }, [activeDestination]);
 
   useEffect(() => {
     localStorage.setItem("mada-offline-regions", JSON.stringify(downloaded));
   }, [downloaded]);
 
   useEffect(() => {
+    localStorage.setItem("mada-favorites", JSON.stringify(favoriteIds));
+  }, [favoriteIds]);
+
+  useEffect(() => {
+    localStorage.setItem("mada-day-plans", JSON.stringify(dayPlans));
+  }, [dayPlans]);
+
+  useEffect(() => {
     const onConnect = () => setIsOnline(true);
     const onDisconnect = () => setIsOnline(false);
     window.addEventListener("online", onConnect);
     window.addEventListener("offline", onDisconnect);
+
     return () => {
       window.removeEventListener("online", onConnect);
       window.removeEventListener("offline", onDisconnect);
     };
   }, []);
+
+  useEffect(() => {
+    if (!filtered.length) return;
+    if (!filtered.some((item) => item.name === activeDestination?.name)) {
+      setActiveDestination(filtered[0]);
+    }
+  }, [filtered, activeDestination]);
 
   const activityStatus = {
     whale: month >= 7 && month <= 10 ? "Live now" : "Opens in July",
@@ -136,6 +230,12 @@ function App() {
     );
   }
 
+  function toggleFavorite(name) {
+    setFavoriteIds((prev) =>
+      prev.includes(name) ? prev.filter((id) => id !== name) : [...prev, name]
+    );
+  }
+
   function addToDay(dayIndex, destinationName) {
     setDayPlans((prev) => {
       const next = [...prev];
@@ -146,11 +246,28 @@ function App() {
     });
   }
 
+  function removeFromDay(dayIndex, place) {
+    setDayPlans((prev) => {
+      const next = [...prev];
+      next[dayIndex] = next[dayIndex].filter((item) => item !== place);
+      return next;
+    });
+  }
+
+  function clearItinerary() {
+    setDayPlans(Array.from({ length: 7 }, () => []));
+  }
+
+  function createBookingLink(destinationName, guideName) {
+    const message = `Salama! I want to book a Madagascar trip. Destination: ${destinationName}. Preferred guide: ${guideName}.`;
+    return `https://wa.me/261340000000?text=${encodeURIComponent(message)}`;
+  }
+
   return (
     <div className="min-h-screen bg-mada-gradient font-body text-mada-text">
       {!isOnline && (
         <div className="fixed inset-x-0 top-0 z-50 mx-auto mt-3 flex w-fit items-center gap-2 rounded-full border border-amber-300/40 bg-mada-midnight/90 px-4 py-2 text-sm">
-          <WifiOff size={15} /> Offline mode active. Saved regions available.
+          <WifiOff size={15} /> Offline mode active. Saved regions and itinerary available.
         </div>
       )}
 
@@ -170,16 +287,44 @@ function App() {
           </p>
           <h1 className="font-display text-5xl font-semibold leading-tight md:text-7xl">Madagascar awaits</h1>
           <p className="mt-4 max-w-2xl text-lg text-slate-200">
-            Premium, local-first trips built with verified Malagasy guides, live season intelligence, and offline-ready route maps.
+            Plan and book with confidence: real routes, seasonal insights, live conversion, and local guide booking.
           </p>
-          <div className="mt-8 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-xl">
-            <Search className="text-mada-gold" />
-            <input
-              className="w-full bg-transparent text-base outline-none placeholder:text-slate-300"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search Nosy Be, RN7, Tsingy..."
-            />
+
+          <div className="mt-8 grid w-full max-w-4xl gap-3 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-xl md:grid-cols-4">
+            <div className="col-span-2 flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3">
+              <Search className="text-mada-gold" size={18} />
+              <input
+                className="w-full bg-transparent py-2 text-sm outline-none placeholder:text-slate-300"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search Nosy Be, RN7, Tsingy..."
+              />
+            </div>
+
+            <select
+              className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm"
+              value={selectedRegion}
+              onChange={(e) => setSelectedRegion(e.target.value)}
+            >
+              {REGIONS.map((region) => (
+                <option key={region} value={region} className="bg-mada-midnight text-mada-text">
+                  {region}
+                </option>
+              ))}
+            </select>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm">
+              <p className="text-xs text-slate-300">Min rating: {minRating.toFixed(1)}</p>
+              <input
+                type="range"
+                min="4.5"
+                max="5"
+                step="0.1"
+                value={minRating}
+                onChange={(e) => setMinRating(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
           </div>
         </div>
       </header>
@@ -187,7 +332,7 @@ function App() {
       <main className="mx-auto max-w-6xl space-y-16 px-6 pb-16">
         <section className="grid gap-4 md:grid-cols-3">
           {[
-            { icon: Compass, title: "30+ Destinations", value: `${DESTINATIONS.length} mapped spots` },
+            { icon: Compass, title: "Filtered Destinations", value: `${filtered.length} of ${DESTINATIONS.length}` },
             { icon: Users, title: "Local Guides", value: "216 verified Malagasy experts" },
             { icon: CalendarDays, title: "Best Time Engine", value: seasonalSummary() }
           ].map((item) => (
@@ -214,24 +359,49 @@ function App() {
         </section>
 
         <section>
-          <h2 className="mb-5 font-display text-3xl">Destinations carousel</h2>
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="font-display text-3xl">Destinations carousel</h2>
+            <p className="text-sm text-slate-300">Tap a card to focus map + weather</p>
+          </div>
+
           <div className="hide-scrollbar flex snap-x gap-4 overflow-x-auto pb-4">
-            {filtered.slice(0, 16).map((d) => (
+            {filtered.slice(0, 18).map((d) => (
               <motion.article
                 key={d.name}
                 whileHover={{ rotateX: 6, rotateY: -6, y: -5 }}
                 transition={{ type: "spring", stiffness: 180, damping: 16 }}
                 className="group min-w-[260px] snap-center overflow-hidden rounded-3xl border border-white/10 bg-mada-midnight/70"
               >
-                <img src={d.image} alt={d.name} className="h-44 w-full object-cover" loading="lazy" />
+                <button type="button" onClick={() => setActiveDestination(d)} className="w-full text-left">
+                  <img src={d.image} alt={d.name} className="h-44 w-full object-cover" loading="lazy" />
+                </button>
+
                 <div className="space-y-2 p-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <h3 className="font-display text-xl">{d.name}</h3>
                     <span className="inline-flex items-center gap-1 text-sm text-amber-300">
                       <Star size={14} /> {d.rating}
                     </span>
                   </div>
+
                   <p className="text-sm text-slate-300">{d.drive}</p>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => addToDay(0, d.name)}
+                      className="rounded-full bg-white/10 px-3 py-1 text-xs"
+                    >
+                      Add to Day 1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(d.name)}
+                      className={`rounded-full px-3 py-1 text-xs ${favoriteIds.includes(d.name) ? "bg-rose-500/90" : "bg-white/10"}`}
+                    >
+                      <span className="inline-flex items-center gap-1"><Heart size={12} /> Save</span>
+                    </button>
+                  </div>
                 </div>
               </motion.article>
             ))}
@@ -243,12 +413,13 @@ function App() {
             <h2 className="mb-4 font-display text-3xl">Interactive Madagascar map</h2>
             <div className="overflow-hidden rounded-3xl border border-white/10">
               <MapContainer center={[-19.5, 46.5]} zoom={5.5} className="h-[420px] w-full">
+                <MapFlyTo destination={activeDestination} />
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 {filtered.map((d) => (
-                  <Marker key={d.name} position={[d.lat, d.lng]}>
+                  <Marker key={d.name} position={[d.lat, d.lng]} eventHandlers={{ click: () => setActiveDestination(d) }}>
                     <Popup>
                       <strong>{d.name}</strong>
                       <br />
@@ -262,6 +433,21 @@ function App() {
 
           <div className="space-y-6">
             <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
+              <h3 className="mb-2 font-display text-2xl">Live Weather + Best Time</h3>
+              <p className="text-sm text-slate-300">Focus: {activeDestination?.name}</p>
+              {weather.loading ? (
+                <p className="mt-2 text-sm">Loading weather...</p>
+              ) : (
+                <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div className="rounded-lg bg-black/20 p-2">Temp: <strong>{weather.temp ?? "--"}C</strong></div>
+                  <div className="rounded-lg bg-black/20 p-2">Wind: <strong>{weather.wind ?? "--"} km/h</strong></div>
+                  <div className="rounded-lg bg-black/20 p-2">Code: <strong>{weather.code ?? "--"}</strong></div>
+                </div>
+              )}
+              <p className="mt-3 text-sm text-mada-emerald">{seasonalSummary()}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
               <h3 className="mb-3 flex items-center gap-2 font-display text-2xl">
                 <CalendarDays className="text-mada-gold" /> Real-time activities
               </h3>
@@ -270,7 +456,6 @@ function App() {
                 <p>Lemur treks: <span className="text-mada-emerald">{activityStatus.lemur}</span></p>
                 <p>Night walks: <span className="text-mada-emerald">{activityStatus.night}</span></p>
               </div>
-              <p className="mt-3 text-sm text-slate-300">Malagasy guide = 10x better experience in remote parks.</p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
@@ -285,6 +470,7 @@ function App() {
               />
               <p className="mt-3 text-sm">EUR: <strong>{(fromMga * rates.EUR).toFixed(2)}</strong></p>
               <p className="text-sm">USD: <strong>{(fromMga * rates.USD).toFixed(2)}</strong></p>
+              <p className="mt-2 text-xs text-slate-400">Rates source: open.er-api.com ({rates.updatedAt})</p>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
@@ -306,23 +492,6 @@ function App() {
           </div>
         </section>
 
-        <section>
-          <h2 className="mb-5 font-display text-3xl">4-column destination mosaic</h2>
-          <div className="columns-1 gap-4 space-y-4 md:columns-2 xl:columns-4">
-            {filtered.map((d) => (
-              <div key={`${d.name}-mosaic`} className="break-inside-avoid overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-                <div className="relative">
-                  <img src={d.image} alt={d.name} loading="lazy" className="h-48 w-full object-cover" />
-                  <div className="absolute inset-x-0 bottom-0 bg-black/50 p-3 backdrop-blur-sm">
-                    <p className="font-medium">{d.name}</p>
-                    <p className="text-xs text-slate-200">{d.region} • {d.drive}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
         <section className="grid gap-6 md:grid-cols-3">
           {GUIDE_SPOTLIGHT.map((g) => (
             <article key={g.name} className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-xl">
@@ -330,23 +499,42 @@ function App() {
               <h3 className="font-display text-xl">{g.name}</h3>
               <p className="text-sm text-slate-300">{g.base} • {g.focus}</p>
               <p className="mt-2 text-sm">⭐ {g.score} ({g.reviews} reviews)</p>
-              <a
-                href={`https://wa.me/261340000000?text=Hi%20${encodeURIComponent(g.name)},%20I%20want%20to%20book%20a%20Madagascar%20trip.`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-block rounded-full bg-mada-gold px-4 py-2 text-sm font-semibold text-mada-midnight"
-              >
-                Book on WhatsApp
-              </a>
+              <div className="mt-4 flex gap-2">
+                <a
+                  href={`https://wa.me/${g.whatsapp}?text=${encodeURIComponent("Salama! I need your help for a Madagascar trip.")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block rounded-full bg-mada-gold px-4 py-2 text-sm font-semibold text-mada-midnight"
+                >
+                  Guide WhatsApp
+                </a>
+                <a
+                  href={createBookingLink(activeDestination?.name || "TBD", g.name)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block rounded-full bg-mada-emerald px-4 py-2 text-sm font-semibold text-mada-midnight"
+                >
+                  Book This Plan
+                </a>
+              </div>
             </article>
           ))}
         </section>
 
         <section>
-          <h2 className="mb-4 font-display text-3xl">7-day itinerary builder</h2>
-          <p className="mb-4 text-sm text-slate-300">Drag a destination card title into a day slot.</p>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display text-3xl">7-day itinerary builder</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-300">{itineraryCount} activities saved</span>
+              <button type="button" onClick={clearItinerary} className="rounded-full bg-white/10 px-3 py-1 text-xs">
+                Clear all
+              </button>
+            </div>
+          </div>
+          <p className="mb-4 text-sm text-slate-300">Drag a destination card title into a day slot. Click an item to remove it.</p>
+
           <div className="mb-4 flex snap-x gap-2 overflow-x-auto">
-            {filtered.slice(0, 12).map((d) => (
+            {filtered.slice(0, 14).map((d) => (
               <button
                 key={`${d.name}-drag`}
                 draggable
@@ -357,6 +545,7 @@ function App() {
               </button>
             ))}
           </div>
+
           <div className="grid gap-3 md:grid-cols-4">
             {dayPlans.map((day, i) => (
               <div
@@ -366,24 +555,45 @@ function App() {
                 className="min-h-24 rounded-xl border border-dashed border-white/20 bg-white/5 p-3"
               >
                 <p className="mb-2 text-sm font-semibold">Day {i + 1}</p>
-                {day.length ? day.map((place) => <p key={`${i}-${place}`} className="text-sm text-slate-200">• {place}</p>) : <p className="text-xs text-slate-400">Drop places here</p>}
+                {day.length ? (
+                  day.map((place) => (
+                    <button
+                      key={`${i}-${place}`}
+                      type="button"
+                      onClick={() => removeFromDay(i, place)}
+                      className="mb-1 block rounded bg-black/20 px-2 py-1 text-left text-xs text-slate-200"
+                    >
+                      {place}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-400">Drop places here</p>
+                )}
               </div>
             ))}
           </div>
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
-          <h2 className="font-display text-3xl">Mobile-first flow</h2>
-          <p className="mt-2 text-slate-200">Swipe cities below on iPhone 16 Pro width for quick discovery.</p>
-          <div className="hide-scrollbar mt-4 flex gap-3 overflow-x-auto pb-3">
-            {filtered.slice(0, 10).map((city) => (
-              <div key={`${city.name}-swipe`} className="min-w-[180px] snap-center rounded-2xl border border-white/10 bg-mada-midnight/70 p-3">
-                <MapPin size={14} className="text-mada-gold" />
-                <p className="mt-1 text-sm font-medium">{city.name}</p>
-                <p className="text-xs text-slate-300">{city.region}</p>
-              </div>
-            ))}
+          <h2 className="font-display text-3xl">Saved favorites + quick booking</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {favoriteIds.length ? favoriteIds.map((place) => (
+              <span key={place} className="inline-flex items-center gap-1 rounded-full bg-rose-500/90 px-3 py-1 text-xs text-white">
+                <Heart size={12} /> {place}
+              </span>
+            )) : <p className="text-sm text-slate-300">No saved places yet.</p>}
           </div>
+
+          <a
+            href={createBookingLink(activeDestination?.name || "TBD", "Best matched guide")}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex items-center gap-2 rounded-full bg-mada-gold px-4 py-2 text-sm font-semibold text-mada-midnight"
+          >
+            <MapPin size={14} /> Book current destination on WhatsApp
+          </a>
+
+          <p className="mt-3 text-xs text-slate-400">This link includes the destination and preferred guide context for faster confirmations.</p>
         </section>
       </main>
 

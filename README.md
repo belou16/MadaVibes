@@ -11,6 +11,13 @@ npm run dev
 
 Open `http://localhost:5173`
 
+If `5173` is busy on Windows:
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+npm run dev
+```
+
 ## Stack
 
 - React 18 + Vite
