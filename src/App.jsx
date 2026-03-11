@@ -3,16 +3,26 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
+  Check,
   Compass,
   Download,
+  Eye,
+  EyeOff,
   Heart,
+  Lock,
+  LogIn,
+  LogOut,
+  Mail,
   MapPin,
   Search,
+  Send,
   Star,
   Trash2,
+  UserCircle,
   Users,
   Wallet,
-  WifiOff
+  WifiOff,
+  X
 } from "lucide-react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -101,11 +111,116 @@ function MapFlyTo({ destination }) {
   return null;
 }
 
+function AuthModal({ mode, onClose, onSwitch, onAuth }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const isLogin = mode === "login";
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+
+    if (!email || !password) { setError("Remplis tous les champs."); return; }
+    if (!isLogin && !name) { setError("Ton nom est requis."); return; }
+    if (password.length < 6) { setError("Mot de passe : 6 caractères minimum."); return; }
+
+    setLoading(true);
+
+    setTimeout(() => {
+      const users = safeJsonParse(localStorage.getItem("mada-users"), []);
+
+      if (isLogin) {
+        const found = users.find((u) => u.email === email && u.password === password);
+        if (!found) { setError("Email ou mot de passe incorrect."); setLoading(false); return; }
+        onAuth(found);
+      } else {
+        if (users.some((u) => u.email === email)) { setError("Cet email est déjà utilisé."); setLoading(false); return; }
+        const newUser = { name, email, password, createdAt: new Date().toISOString() };
+        localStorage.setItem("mada-users", JSON.stringify([...users, newUser]));
+        onAuth(newUser);
+      }
+
+      setLoading(false);
+    }, 600);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92, y: 20 }}
+        transition={{ type: "spring", stiffness: 260, damping: 22 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md rounded-3xl border border-white/15 bg-gradient-to-b from-slate-800/95 to-mada-midnight/98 p-8 shadow-2xl backdrop-blur-xl"
+      >
+        <button onClick={onClose} className="absolute right-4 top-4 rounded-full p-1 text-slate-400 hover:bg-white/10 hover:text-white">
+          <X size={20} />
+        </button>
+
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-mada-gold to-amber-600">
+            <LogIn size={24} className="text-mada-midnight" />
+          </div>
+          <h2 className="font-display text-2xl font-semibold">{isLogin ? "Bon retour !" : "Créer un compte"}</h2>
+          <p className="mt-1 text-sm text-slate-400">{isLogin ? "Connecte-toi pour retrouver ton itinéraire." : "Rejoins MadaVibes et planifie ton aventure."}</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {!isLogin && (
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+              <UserCircle size={18} className="text-slate-400" />
+              <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" placeholder="Ton nom" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+          )}
+          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+            <Mail size={18} className="text-slate-400" />
+            <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+            <Lock size={18} className="text-slate-400" />
+            <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" type={showPw ? "text" : "password"} placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button type="button" onClick={() => setShowPw(!showPw)} className="text-slate-400 hover:text-white">
+              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+
+          {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl bg-gradient-to-r from-mada-gold to-amber-500 py-3 text-sm font-semibold text-mada-midnight transition hover:brightness-110 disabled:opacity-60"
+          >
+            {loading ? "Chargement..." : isLogin ? "Se connecter" : "Créer mon compte"}
+          </button>
+        </form>
+
+        <p className="mt-5 text-center text-sm text-slate-400">
+          {isLogin ? "Pas encore de compte ? " : "Déjà un compte ? "}
+          <button onClick={onSwitch} className="font-medium text-mada-gold hover:underline">
+            {isLogin ? "S'inscrire" : "Se connecter"}
+          </button>
+        </p>
+      </motion.div>
+    </div>
+  );
+}
+
 function App() {
   const [search, setSearch] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("All");
   const [minRating, setMinRating] = useState(4.6);
   const [activeDestination, setActiveDestination] = useState(DESTINATIONS[0]);
+
+  const [user, setUser] = useState(() => safeJsonParse(localStorage.getItem("mada-current-user"), null));
+  const [authModal, setAuthModal] = useState(null);
+  const [bookingSubmitted, setBookingSubmitted] = useState(false);
 
   const [fromMga, setFromMga] = useState(500000);
   const [rates, setRates] = useState({ EUR: 0.0002, USD: 0.00022, updatedAt: "fallback" });
@@ -263,13 +378,66 @@ function App() {
     return `https://wa.me/261340000000?text=${encodeURIComponent(message)}`;
   }
 
+  function handleAuth(userData) {
+    setUser(userData);
+    localStorage.setItem("mada-current-user", JSON.stringify(userData));
+    setAuthModal(null);
+  }
+
+  function handleLogout() {
+    setUser(null);
+    localStorage.removeItem("mada-current-user");
+  }
+
+  function handleBooking() {
+    if (!user) { setAuthModal("login"); return; }
+    setBookingSubmitted(true);
+    setTimeout(() => setBookingSubmitted(false), 4000);
+  }
+
   return (
     <div className="min-h-screen bg-mada-gradient font-body text-mada-text">
+      {authModal && (
+        <AuthModal
+          mode={authModal}
+          onClose={() => setAuthModal(null)}
+          onSwitch={() => setAuthModal(authModal === "login" ? "register" : "login")}
+          onAuth={handleAuth}
+        />
+      )}
+
       {!isOnline && (
         <div className="fixed inset-x-0 top-0 z-50 mx-auto mt-3 flex w-fit items-center gap-2 rounded-full border border-amber-300/40 bg-mada-midnight/90 px-4 py-2 text-sm">
           <WifiOff size={15} /> Offline mode active. Saved regions and itinerary available.
         </div>
       )}
+
+      <nav className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-mada-midnight/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
+          <span className="font-display text-lg font-semibold">🦎 MadaVibes</span>
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+                <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm">
+                  <UserCircle size={16} className="text-mada-gold" /> {user.name}
+                </span>
+                <button onClick={handleLogout} className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20">
+                  <LogOut size={14} /> Déconnexion
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setAuthModal("login")} className="flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-1.5 text-sm hover:bg-white/20">
+                  <LogIn size={14} /> Connexion
+                </button>
+                <button onClick={() => setAuthModal("register")} className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-mada-gold to-amber-500 px-4 py-1.5 text-sm font-semibold text-mada-midnight hover:brightness-110">
+                  S'inscrire
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </nav>
 
       <header className="relative h-screen overflow-hidden">
         <video
@@ -572,6 +740,51 @@ function App() {
               </div>
             ))}
           </div>
+
+          {itineraryCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-8 rounded-3xl border border-mada-emerald/30 bg-gradient-to-r from-mada-emerald/10 to-mada-gold/10 p-6 backdrop-blur-xl"
+            >
+              <div className="flex flex-col items-center gap-4 md:flex-row md:justify-between">
+                <div>
+                  <h3 className="font-display text-2xl font-semibold">Prêt à réserver ?</h3>
+                  <p className="mt-1 text-sm text-slate-300">
+                    {itineraryCount} activité{itineraryCount > 1 ? "s" : ""} sur {dayPlans.filter((d) => d.length > 0).length} jour{dayPlans.filter((d) => d.length > 0).length > 1 ? "s" : ""} — {user ? `Connecté en tant que ${user.name}` : "Connecte-toi pour réserver"}
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleBooking}
+                    className="flex items-center gap-2 rounded-full bg-gradient-to-r from-mada-emerald to-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110"
+                  >
+                    <Send size={16} /> Réserver mon voyage
+                  </button>
+                  <a
+                    href={createBookingLink(
+                      dayPlans.flat().join(", ") || activeDestination?.name || "Madagascar",
+                      "Best matched guide"
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 rounded-full bg-mada-gold px-6 py-3 text-sm font-semibold text-mada-midnight transition hover:brightness-110"
+                  >
+                    <MapPin size={16} /> Réserver via WhatsApp
+                  </a>
+                </div>
+              </div>
+              {bookingSubmitted && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="mt-4 flex items-center gap-2 rounded-xl bg-mada-emerald/20 px-4 py-3 text-sm text-mada-emerald"
+                >
+                  <Check size={18} /> Demande envoyée ! Un guide MadaVibes te contactera sous 24h.
+                </motion.div>
+              )}
+            </motion.div>
+          )}
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
